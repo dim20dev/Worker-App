@@ -12,7 +12,7 @@
     .row {
       display:flex;
       justify-content:space-between;
-      padding:8px 0;
+      padding:10px 0;
       border-bottom:1px solid #eee;
     }
 
@@ -32,6 +32,7 @@
       border:none;
       border-radius:10px;
       font-weight:bold;
+      cursor:pointer;
     }
 
     .btn1{background:#28a745;color:white;}
@@ -50,10 +51,10 @@
 <div class="card" id="list"></div>
 
 <div class="card">
-  <button class="btn1" onclick="saveData()">Save</button>
-  <button class="btn2" onclick="openSettings()">Settings</button>
-  <button class="btn3" onclick="monthlyReport()">Monthly Report (PDF)</button>
-  <button class="btn4" onclick="viewPast()">Previous Saves</button>
+  <button class="btn1" id="saveBtn">Save</button>
+  <button class="btn2" id="settingsBtn">Settings</button>
+  <button class="btn3" id="monthlyBtn">Monthly Report</button>
+  <button class="btn4" id="pastBtn">Previous Saves</button>
 </div>
 
 <div class="card" id="settings"></div>
@@ -61,11 +62,9 @@
 
 <script type="module">
 
-// 🔥 FIREBASE IMPORTS (IMPORTANT)
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
 import { getFirestore, doc, setDoc, getDoc, getDocs, collection } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
 
-// 🔥 YOUR CONFIG (ALREADY CORRECT)
 const firebaseConfig = {
   apiKey: "AIzaSyDqp_twy2X4lxTrKsMrB3EIs8DYzlVfJ-8",
   authDomain: "workers-27d2f.firebaseapp.com",
@@ -78,22 +77,24 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// 📅 DATE
+// DATE
 let today = new Date().toISOString().slice(0,10);
 document.getElementById("dateTitle").innerText = today;
 
-// 👥 WAITERS (10)
+// NAMES
 let waiterNames = JSON.parse(localStorage.getItem("names")) || [
   "John","Mike","Anna","Chris","Maria",
   "George","Nick","Sofia","Peter","Helen"
 ];
 
-// 🧾 RENDER LIST
+// RENDER LIST
 function render() {
   const list = document.getElementById("list");
   list.innerHTML = "";
 
   waiterNames.forEach((n,i)=>{
+    if(n.trim() === "") return; // 🔥 hide empty names
+
     list.innerHTML += `
       <div class="row">
         <input type="text" value="${n}" id="n${i}">
@@ -102,19 +103,23 @@ function render() {
     `;
   });
 }
-render();
 
-// 💾 SAVE DATA (TO FIREBASE)
-window.saveData = async function() {
+// SAVE
+async function saveData() {
   let data = [];
 
-  for(let i=0;i<waiterNames.length;i++){
-    const name = document.getElementById("n"+i).value;
+  waiterNames.forEach((_,i)=>{
+    const nameEl = document.getElementById("n"+i);
+    if(!nameEl) return;
+
+    const name = nameEl.value.trim();
     const worked = document.getElementById("c"+i).checked;
 
-    data.push({name, worked});
-    waiterNames[i] = name;
-  }
+    if(name !== ""){
+      data.push({name, worked});
+      waiterNames[i] = name;
+    }
+  });
 
   localStorage.setItem("names", JSON.stringify(waiterNames));
 
@@ -123,23 +128,41 @@ window.saveData = async function() {
     data: data
   });
 
-  alert("Saved to cloud!");
+  alert("Saved ✅");
+}
+
+// SETTINGS
+function openSettings(){
+  let html = "<h3>Edit Names</h3>";
+
+  waiterNames.forEach((n,i)=>{
+    html += `<input id="s${i}" value="${n}" placeholder="Empty = hidden"><br>`;
+  });
+
+  html += `<button onclick="window.saveNames()">Save Names</button>`;
+  document.getElementById("settings").innerHTML = html;
+}
+
+window.saveNames = function(){
+  waiterNames = waiterNames.map((_,i)=>document.getElementById("s"+i).value.trim());
+  localStorage.setItem("names", JSON.stringify(waiterNames));
+  render();
+  alert("Updated ✅");
 };
 
-// 📂 VIEW PREVIOUS
-window.viewPast = async function(){
+// PREVIOUS
+async function viewPast(){
   const snap = await getDocs(collection(db,"days"));
 
   let html = "<h3>Previous Saves</h3>";
 
   snap.forEach(d=>{
-    html += `<button onclick='openDay("${d.id}")'>${d.id}</button><br>`;
+    html += `<button onclick="window.openDay('${d.id}')">${d.id}</button><br>`;
   });
 
   document.getElementById("past").innerHTML = html;
-};
+}
 
-// 📖 OPEN DAY
 window.openDay = async function(date){
   const snap = await getDoc(doc(db,"days",date));
   const d = snap.data();
@@ -153,29 +176,9 @@ window.openDay = async function(date){
   document.getElementById("past").innerHTML = html;
 };
 
-// ⚙️ SETTINGS
-window.openSettings = function(){
-  let html = "<h3>Edit Names</h3>";
-
-  waiterNames.forEach((n,i)=>{
-    html += `<input id="s${i}" value="${n}"><br>`;
-  });
-
-  html += `<button onclick="saveNames()">Save Names</button>`;
-  document.getElementById("settings").innerHTML = html;
-};
-
-window.saveNames = function(){
-  waiterNames = waiterNames.map((_,i)=>document.getElementById("s"+i).value);
-  localStorage.setItem("names", JSON.stringify(waiterNames));
-  render();
-  alert("Names saved");
-};
-
-// 📄 MONTHLY PDF
-window.monthlyReport = async function(){
+// MONTHLY
+async function monthlyReport(){
   const snap = await getDocs(collection(db,"days"));
-
   let counts = {};
   let now = new Date();
 
@@ -201,7 +204,16 @@ window.monthlyReport = async function(){
   let win = window.open();
   win.document.write(html);
   win.print();
-};
+}
+
+// BUTTON EVENTS (FIXED 🔥)
+document.getElementById("saveBtn").onclick = saveData;
+document.getElementById("settingsBtn").onclick = openSettings;
+document.getElementById("monthlyBtn").onclick = monthlyReport;
+document.getElementById("pastBtn").onclick = viewPast;
+
+// START
+render();
 
 </script>
 
